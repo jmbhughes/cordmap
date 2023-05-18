@@ -1,0 +1,5 @@
+goes-solar-retriever
+numpy
+pandas
+torch
+torchvision
