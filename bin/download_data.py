@@ -60,7 +60,7 @@ def download_many_dates(start: datetime, end: datetime, count: int, destination:
 if __name__ == "__main__":
     start = datetime(2021, 4, 1)
     end = datetime.now()
-    count = 5
+    count = 200
     destination = "/Users/jhughes/Desktop/repos/cordmap/data/"
 
     download_many_dates(start, end, count, destination)
