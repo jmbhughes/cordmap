@@ -54,14 +54,26 @@ def download_many_dates(start: datetime, end: datetime, count: int, destination:
 
     # write out the index
     df = pd.DataFrame(valid_results)
+
+    # remove all the absolute paths now that we no longer need them
+    for col in df.columns:
+        df[col] = df[col].map(lambda e: os.path.basename(e))
+
     df.to_csv(os.path.join(destination, "index.csv"))
 
 
 if __name__ == "__main__":
+    # start = datetime(2021, 4, 1)
+    # end = datetime.now()
+    # count = 200
+    # destination = "/Users/jhughes/Desktop/repos/cordmap/data/"
+    #
+    # download_many_dates(start, end, count, destination)
+
     start = datetime(2021, 4, 1)
     end = datetime.now()
-    count = 200
-    destination = "/Users/jhughes/Desktop/repos/cordmap/data/"
+    count = 5
+    destination = "/Users/jhughes/Desktop/test/"
 
     download_many_dates(start, end, count, destination)
 
