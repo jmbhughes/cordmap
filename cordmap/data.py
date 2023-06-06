@@ -1,5 +1,5 @@
 import os
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 
 import numpy as np
 from astropy.io import fits
@@ -10,14 +10,15 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 from sunpy.visualization.colormaps.color_tables import suvi_color_table
 import astropy.units as u
+import cv2
 
 
-SUVI_CHANNELS_KEYS = ("Product.suvi_l2_ci094",
-                      "Product.suvi_l2_ci131",
-                      "Product.suvi_l2_ci171",
-                      "Product.suvi_l2_ci195",
-                      "Product.suvi_l2_ci284",
-                      "Product.suvi_l2_ci304")
+SUVI_CHANNEL_KEYS = ("Product.suvi_l2_ci094",
+                     "Product.suvi_l2_ci131",
+                     "Product.suvi_l2_ci171",
+                     "Product.suvi_l2_ci195",
+                     "Product.suvi_l2_ci284",
+                     "Product.suvi_l2_ci304")
 
 THMAP_KEY = "Product.suvi_l2_thmap"
 
@@ -37,19 +38,26 @@ class SUVIImageDataset(Dataset):
     """ A pytorch dataset for the SUVI composite images with labels of thematic maps"""
     def __init__(self,
                  index_path: str,
-                 img_dir: str,
-                 image_dim: Tuple[int, int],
-                 split_range: Tuple[float, float]):
+                 image_dir: str,
+                 image_dim: Optional[Tuple[int, int]] = None,
+                 channels: Tuple[str] = SUVI_CHANNEL_KEYS):
         """ Create a SUVIImageDataset
         Parameters
         ----------
         index_path : str
             where the index CSV file that groups the images together is
-        img_dir : str
+        image_dir : str
             the path to the data folder
+        image_dim: (int, int) or None
+            if None, nothing happens, else resize the images to specified dimensions before returning
+        channels: List[str]
+            ordering for which channels to use in the dataset
         """
         self.index = pd.read_csv(index_path, index_col=0)
-        self.img_dir = img_dir
+        self.image_dir = image_dir
+
+        self.image_dim = image_dim
+        self.channels = channels
 
     def __len__(self):
         """ Number of groups in the dataset
@@ -77,37 +85,47 @@ class SUVIImageDataset(Dataset):
         """
         # Load the row and convert to full paths
         img_paths = dict(self.index.loc[idx])
-        img_paths = {kind: os.path.join(self.img_dir, str(path)) for kind, path in img_paths.items()
-                     if kind in SUVI_CHANNELS_KEYS or kind == THMAP_KEY}
+        img_paths = {kind: os.path.join(self.image_dir, str(path)) for kind, path in img_paths.items()
+                     if kind in self.channels or kind == THMAP_KEY}
 
         # Open the images
         images = {kind: fits.open(path) for kind, path in img_paths.items()}
 
-        # SUVI images are in HDU=1, pytorch wants the channels as the first dimensino
-        image_cube = np.stack([images[key][1].data for key in SUVI_CHANNELS_KEYS], axis=0)
+        # SUVI images are in HDU=1, pytorch wants the channels as the first dimension
+        image_cube = np.stack([images[key][1].data for key in self.channels], axis=0)
         label = images[THMAP_KEY][0].data  # thematic maps are in HDU = 0
+
+        # Resize images as needed
+        if self.image_dim is not None:
+            dsize = (self.image_dim[1], self.image_dim[0])  # note that cv2 uses opposite ordering from numpy
+            image_cube = np.stack([cv2.resize(image, dsize=dsize) for image in image_cube])
+            label = cv2.resize(label, dsize=dsize, interpolation=cv2.INTER_NEAREST)
+
         return image_cube, label
 
-    def visualize(self, idx: int) -> None:
-        """
+    def visualize(self, idx: int) -> Tuple[plt.Figure, plt.Axes]:
+        """ Creates a simple plot of the data at idx
 
         Parameters
         ----------
-        idx
+        idx : int
+            what index value (the first column in the CSV) to load
 
         Returns
         -------
+        Tuple[plt.Figure, plt.Axes]
+            the created figure and its axes
 
         """
         cube, label = self[idx]
 
-        # set up the colorbatl
+        # set up the color map
         cmap = matplotlib.colors.ListedColormap(THEMATIC_MAP_COLORS)
 
         # do actual plotting
         fig, axs = plt.subplots(ncols=2, nrows=4, figsize=(8, 16))
 
-        for i, key in enumerate(SUVI_CHANNELS_KEYS):
+        for i, key in enumerate(SUVI_CHANNEL_KEYS):
             wavelength = int(key[-3:]) * u.angstrom
             row, col = i // 2, i % 2
             low, high = np.nanpercentile(cube[i], 3), np.nanpercentile(cube[i], 99)
@@ -115,7 +133,11 @@ class SUVIImageDataset(Dataset):
             axs[row, col].set_title(key)
             axs[row, col].set_axis_off()
 
-        axs[-1, -1].imshow(label, origin='lower', cmap=cmap, vmin=-1, vmax=len(THEMATIC_MAP_COLORS), interpolation='none')
+        axs[-1, -1].imshow(label, origin='lower',
+                           cmap=cmap,
+                           vmin=-1,
+                           vmax=len(THEMATIC_MAP_COLORS),
+                           interpolation='none')
         axs[-1, -1].set_axis_off()
         axs[-1, -1].set_title("Thematic map")
 
