@@ -7,8 +7,8 @@ from cordmap.data import SUVIImageDataset
 
 
 if __name__ == "__main__":
-    preview_dir = "/Users/jhughes/Desktop/repos/cordmap/previews/"
-    img_dir = "/Users/jhughes/Desktop/repos/cordmap/data/"
+    preview_dir = "./previews/"
+    img_dir = "./data/"
     index_path = os.path.join(img_dir, "index.csv")
 
     d = SUVIImageDataset(index_path, img_dir)
