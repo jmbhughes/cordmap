@@ -4,3 +4,5 @@ pandas
 torch
 torchvision
 astropy
+sunpy
+matplotlib

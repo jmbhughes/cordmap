@@ -35,7 +35,11 @@ THEMATIC_MAP_COLORS = ["white",
 
 class SUVIImageDataset(Dataset):
     """ A pytorch dataset for the SUVI composite images with labels of thematic maps"""
-    def __init__(self, index_path: str, img_dir: str):
+    def __init__(self,
+                 index_path: str,
+                 img_dir: str,
+                 image_dim: Tuple[int, int],
+                 split_range: Tuple[float, float]):
         """ Create a SUVIImageDataset
         Parameters
         ----------
