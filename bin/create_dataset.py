@@ -79,6 +79,3 @@ if __name__ == "__main__":
         raise RuntimeError("Count must be an integer >0")
 
     download_many_dates(start, end, args.count, args.destination)
-
-
-

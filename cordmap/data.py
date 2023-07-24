@@ -40,6 +40,7 @@ class SUVIImageDataset(Dataset):
                  index_path: str,
                  image_dir: str,
                  image_dim: Optional[Tuple[int, int]] = None,
+                 mask_dim: Optional[Tuple[int, int]] = None,
                  channels: Tuple[str] = SUVI_CHANNEL_KEYS):
         """ Create a SUVIImageDataset
         Parameters
@@ -57,6 +58,7 @@ class SUVIImageDataset(Dataset):
         self.image_dir = image_dir
 
         self.image_dim = image_dim
+        self.mask_dim = mask_dim
         self.channels = channels
 
     def __len__(self):
