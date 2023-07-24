@@ -1,5 +1,7 @@
 # cordmap
-Tools for **CO**mprehensive **R**apid **D**igest maps for space weather. 
+⚠️CAUTION: this repo is still under heavy development⚠️
+
+Tools for **CO**mprehensive **R**apid **D**igest maps for space weather.
 
 ## 1. Preparing data
 
@@ -20,7 +22,7 @@ d = SUVIImageDataset("../data/good_index.csv", "../data")
 ### b. Train/test splits
 
 
-## 2. Fine-tuning SAM 
+## 2. Fine-tuning SAM
 
 
 ## Contact
