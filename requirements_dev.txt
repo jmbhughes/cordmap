@@ -7,4 +7,7 @@ astropy
 sunpy
 opencv-python
 matplotlib
+humanfriendly
+dask
+
 pytest
