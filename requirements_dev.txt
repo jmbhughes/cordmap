@@ -9,5 +9,6 @@ opencv-python
 matplotlib
 humanfriendly
 dask
+tqdm
 
 pytest
