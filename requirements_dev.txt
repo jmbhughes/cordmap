@@ -10,5 +10,8 @@ matplotlib
 humanfriendly
 dask
 tqdm
+datasets
+monai
+git+https://github.com/huggingface/transformers.git
 
 pytest
