@@ -5,7 +5,6 @@ import argparse
 import pandas as pd
 from goessolarretriever import Retriever, Satellite, Product
 from dateutil.parser import parse as parse_str_to_datetime
-from datasets import Dataset, Image
 
 
 def generate_spaced_times(start: datetime, end: datetime, count: int) -> List[datetime]:
