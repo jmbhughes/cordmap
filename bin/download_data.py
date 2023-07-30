@@ -43,7 +43,12 @@ def download_many_dates(start: datetime, end: datetime, count: int, destination:
     # download all the sets keeping track of their filenames
     results = []
     for dt in dates:
-        results.append(download_single_date(dt, destination))
+        try:
+            result = download_single_date(dt, destination)
+        except ValueError:
+            pass
+        else:
+            results.append(result)
 
     # Keep only sets that have all their files
     valid_results = [s for s in results if all([e is not None for e in s.values()])]
@@ -52,7 +57,7 @@ def download_many_dates(start: datetime, end: datetime, count: int, destination:
         for filename in invalid_result.values():
             if filename is not None:
                 os.remove(filename)
-
+    
     # write out the index
     df = pd.DataFrame(valid_results)
 
