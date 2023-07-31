@@ -10,12 +10,15 @@ from transformers import SamProcessor
 import argparse
 import numpy as np
 from torch.utils.data import Dataset
-import zarr
+
 
 import sys
 sys.path.append("/home/mhughes/repos/cordmap")
-from cordmap.prompt import get_bounding_box
 
+
+def get_bounding_box(ground_truth_map):
+    bbox = [24, 24, 1000, 1000]  # TODO: remove hardcoding
+    return bbox
 
 class SAMDataset(Dataset):
   def __init__(self, dataset, processor):
@@ -66,6 +69,7 @@ def train(images, masks, num_epochs=3, model_name="facebook/sam-vit-base"):
     seg_loss = monai.losses.DiceCELoss(sigmoid=True, squared_pred=True, reduction='mean')
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(device)
     model.to(device)
 
     model.train()
@@ -101,17 +105,41 @@ if __name__ == "__main__":
     # parser.add_argument("num_epochs")
     # parser.add_argument("batch_size")
     # parser.add_argument("learning_rate")
+    from cordmap.data import SUVIImageDataset
+    import cv2
+
     chosen_channels = ("Product.suvi_l2_ci171", "Product.suvi_l2_ci284", "Product.suvi_l2_ci304")
-    chosen_channels = np.array([2, 4, 5])
+    d = SUVIImageDataset("/d0/mhughes/thmap_test/index.csv", "/d0/mhughes/thmap_test/", image_dim=(1024, 1024), channels=chosen_channels)
+    print("num images", len(d))
+    images = []
+    masks = []
+    for i in range(25):
+        try:
+            this_entry = d[i]
+        except:
+            pass
+        else:
+            images.append(np.transpose(this_entry[0], [1, 2, 0]))
+            masks.append(cv2.resize(this_entry[1], dsize=(256, 256), interpolation=cv2.INTER_NEAREST) == 3)
+            
+    images = np.array(images)
+    masks = np.array(masks)
+
+    images = np.sign(images) * np.power(np.abs(images), 0.25)
     
-    images = zarr.open("/d0/mhughes/thmap_suvi_train_x.zarr")
-    masks = zarr.open("/d0/mhughes/thmap_suvi_train_y.zarr")
-    
-    images = np.array(images)[:, chosen_channels, :, :]
-    masks = np.array(masks) == 3
-    
-    print(images.shape, masks.shape)
+    factors = dict()
+    for i in range(images.shape[-1]):
+        low, high = np.percentile(images[:, :, :, i], 3), np.percentile(images[:, :, :, i], 99.99)
+        factors[i] = low, high
+        
+    for (c, (low, high)) in factors.items():
+        images[:, :, :, c] = np.clip((images[:, :, :, c] - low) / (high - low) * 255, 0, 255)
+        
+    images = images.astype(np.uint8)
     
     model = train(images, masks, num_epochs=10)
+    print(dir(model))
     model.save_pretrained("/home/mhughes/test_model/")
-
+    
+    print("going again!")
+    second = train(images, masks, num_epochs=5, model_name="/home/mhughes/test_model/")
