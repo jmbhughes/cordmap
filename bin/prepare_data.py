@@ -197,6 +197,11 @@ if __name__ == "__main__":
     test_x = scale_data(test_x, lows, highs)
 
     # save everything!     
+    with open(os.path.join(args.output_path, "thmap_suvi_lows_highs.txt"), "w") as f:
+        low_str = f"{lows[0]} {lows[1]} {lows[2]} {lows[3]} {lows[4]} {lows[5]}"
+        high_str = f"{highs[0]} {highs[1]} {highs[2]} {highs[3]} {highs[4]} {highs[5]}"
+        f.write(low_str + "\n" + high_str)
+    
     zarr.save(os.path.join(args.output_path, "thmap_suvi_train_x.zarr"), train_x)
     zarr.save(os.path.join(args.output_path, "thmap_suvi_train_y.zarr"), train_y)
     train_meta.to_csv(os.path.join(args.output_path, "thmap_suvi_train.csv"))
