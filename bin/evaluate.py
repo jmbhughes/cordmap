@@ -12,10 +12,9 @@ import numpy as np
 from torch.utils.data import Dataset
 import zarr
 import sys
-sys.path.append("/home/mhughes/repos/cordmap")
-from cordmap.prompt import get_bounding_box
 from transformers import SamProcessor
 import matplotlib.pyplot as plt
+from cordmap.prompt import get_bounding_box
 
 
 if __name__ == "__main__":
@@ -34,7 +33,7 @@ if __name__ == "__main__":
 
   new_dataset = [{"image": img, "label": m} for img, m in zip(images, masks)] 
   
-  idx = 100
+  idx = 4
 
   image = new_dataset[idx]["image"]
   print(image.shape, np.nanpercentile(image, 95))
@@ -51,7 +50,6 @@ if __name__ == "__main__":
   # forward pass
   with torch.no_grad():
     outputs = model(**inputs, multimask_output=False)
-
 
   # apply sigmoid
   medsam_seg_prob = torch.sigmoid(outputs.pred_masks.squeeze(1))

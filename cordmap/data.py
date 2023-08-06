@@ -11,6 +11,7 @@ from matplotlib.patches import Patch
 from sunpy.visualization.colormaps.color_tables import suvi_color_table
 import astropy.units as u
 import cv2
+from cordmap.prompt import get_bounding_box
 
 
 SUVI_CHANNEL_KEYS = ("Product.suvi_l2_ci094",
@@ -33,6 +34,33 @@ THEMATIC_MAP_COLORS = ["white",
                        "#56B4E9",
                        "#CC79A7"]
 
+
+class SAMDataset(Dataset):
+  def __init__(self, dataset, processor):
+    self.dataset = dataset
+    self.processor = processor
+
+  def __len__(self):
+    return len(self.dataset)
+
+  def __getitem__(self, idx):
+    item = self.dataset[idx]
+    image = item["image"]
+    ground_truth_mask = np.array(item["label"])
+
+    # get bounding box prompt
+    prompt = get_bounding_box(ground_truth_mask)
+
+    # prepare image and prompt for the model
+    inputs = self.processor(image, input_boxes=[[prompt]], return_tensors="pt")
+
+    # remove batch dimension which the processor adds by default
+    inputs = {k:v.squeeze(0) for k,v in inputs.items()}
+
+    # add ground truth segmentation
+    inputs["ground_truth_mask"] = ground_truth_mask
+
+    return inputs
 
 class SUVIImageDataset(Dataset):
     """ A pytorch dataset for the SUVI composite images with labels of thematic maps"""
