@@ -12,5 +12,5 @@ dask
 tqdm
 datasets
 monai
-git+https://github.com/huggingface/transformers.git
+transformers
 zarr
