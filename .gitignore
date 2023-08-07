@@ -163,3 +163,7 @@ cython_debug/
 
 # vscode
 .vscode
+
+# experiment things
+results/
+scratch.ipynb

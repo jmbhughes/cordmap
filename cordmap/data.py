@@ -1,6 +1,5 @@
 import os
 from typing import Tuple, List, Optional
-
 import numpy as np
 from astropy.io import fits
 import pandas as pd
@@ -11,7 +10,9 @@ from matplotlib.patches import Patch
 from sunpy.visualization.colormaps.color_tables import suvi_color_table
 import astropy.units as u
 import cv2
-from cordmap.prompt import get_bounding_box
+from cordmap.prompt import get_suvi_prompt_box
+
+THMAP_SIZE = 256
 
 
 SUVI_CHANNEL_KEYS = ("Product.suvi_l2_ci094",
@@ -34,104 +35,42 @@ THEMATIC_MAP_COLORS = ["white",
                        "#56B4E9",
                        "#CC79A7"]
 
+THMEMATIC_MAP_THEMES = {'unlabeled': 0,
+                        'empty_outer_space': 1,
+                        'bright_region': 3,
+                        'filament': 4, 
+                        'prominence': 5,
+                        'coronal_hole': 6, 
+                        'quiet_sun': 7, 
+                        'limb': 8,
+                        'flare': 9}
 
-class SAMDataset(Dataset):
-  def __init__(self, dataset, processor):
-    self.dataset = dataset
-    self.processor = processor
-
-  def __len__(self):
-    return len(self.dataset)
-
-  def __getitem__(self, idx):
-    item = self.dataset[idx]
-    image = item["image"]
-    ground_truth_mask = np.array(item["label"])
-
-    # get bounding box prompt
-    prompt = get_bounding_box(ground_truth_mask)
-
-    # prepare image and prompt for the model
-    inputs = self.processor(image, input_boxes=[[prompt]], return_tensors="pt")
-
-    # remove batch dimension which the processor adds by default
-    inputs = {k:v.squeeze(0) for k,v in inputs.items()}
-
-    # add ground truth segmentation
-    inputs["ground_truth_mask"] = ground_truth_mask
-
-    return inputs
-
-class SUVIImageDataset(Dataset):
-    """ A pytorch dataset for the SUVI composite images with labels of thematic maps"""
-    def __init__(self,
-                 index_path: str,
-                 image_dir: str,
-                 image_dim: Optional[Tuple[int, int]] = None,
-                 mask_dim: Optional[Tuple[int, int]] = None,
-                 channels: Tuple[str] = SUVI_CHANNEL_KEYS):
-        """ Create a SUVIImageDataset
-        Parameters
-        ----------
-        index_path : str
-            where the index CSV file that groups the images together is
-        image_dir : str
-            the path to the data folder
-        image_dim: (int, int) or None
-            if None, nothing happens, else resize the images to specified dimensions before returning
-        channels: List[str]
-            ordering for which channels to use in the dataset
-        """
-        self.index = pd.read_csv(index_path, index_col=0)
-        self.image_dir = image_dir
-
-        self.image_dim = image_dim
-        self.mask_dim = mask_dim
-        self.channels = channels
+class SUVIDataset(Dataset):
+    def __init__(self, images, masks, processor):
+        self.dataset = [{"image": img, "label": m} for img, m in zip(images, masks)]
+        self.processor = processor
 
     def __len__(self):
-        """ Number of groups in the dataset
+        return len(self.dataset)
 
-        Returns
-        -------
-        int
-            the number of composite image/thematic map groups in the dataset
-        """
-        return len(self.index)
+    def __getitem__(self, idx):
+        item = self.dataset[idx]
+        image = item["image"]
+        ground_truth_mask = np.array(item["label"])
 
-    def __getitem__(self, idx: int) -> Tuple[np.ndarray, np.ndarray]:
-        """ Loads the group at index=idx
+        # get bounding box prompt
+        prompt = get_suvi_prompt_box()
 
-        Parameters
-        ----------
-        idx : int
-            what index value (the first column in the CSV) to load
+        # prepare image and prompt for the model
+        inputs = self.processor(image, input_boxes=[[prompt]], return_tensors="pt")
 
-        Returns
-        -------
-        image_cube, label as tuple of ndarray
-            the image_cube is the stacked composite, label is the thematic map
+        # remove batch dimension which the processor adds by default
+        inputs = {k:v.squeeze(0) for k,v in inputs.items()}
 
-        """
-        # Load the row and convert to full paths
-        img_paths = dict(self.index.loc[idx])
-        img_paths = {kind: os.path.join(self.image_dir, str(path)) for kind, path in img_paths.items()
-                     if kind in self.channels or kind == THMAP_KEY}
+        # add ground truth segmentation
+        inputs["ground_truth_mask"] = ground_truth_mask
 
-        # Open the images
-        images = {kind: fits.open(path) for kind, path in img_paths.items()}
-
-        # SUVI images are in HDU=1, pytorch wants the channels as the first dimension
-        image_cube = np.stack([images[key][1].data for key in self.channels], axis=0)
-        label = images[THMAP_KEY][0].data  # thematic maps are in HDU = 0
-
-        # Resize images as needed
-        if self.image_dim is not None:
-            dsize = (self.image_dim[1], self.image_dim[0])  # note that cv2 uses opposite ordering from numpy
-            image_cube = np.stack([cv2.resize(image, dsize=dsize) for image in image_cube])
-            label = cv2.resize(label, dsize=dsize, interpolation=cv2.INTER_NEAREST)
-
-        return image_cube, label
+        return inputs
 
     def visualize(self, idx: int) -> Tuple[plt.Figure, plt.Axes]:
         """ Creates a simple plot of the data at idx
@@ -147,7 +86,9 @@ class SUVIImageDataset(Dataset):
             the created figure and its axes
 
         """
-        cube, label = self[idx]
+        inputs = self[idx]
+        cube = inputs["image"]
+        label = np.array(inputs["label"])
 
         # set up the color map
         cmap = matplotlib.colors.ListedColormap(THEMATIC_MAP_COLORS)
@@ -158,16 +99,16 @@ class SUVIImageDataset(Dataset):
         for i, key in enumerate(SUVI_CHANNEL_KEYS):
             wavelength = int(key[-3:]) * u.angstrom
             row, col = i // 2, i % 2
-            low, high = np.nanpercentile(cube[i], 3), np.nanpercentile(cube[i], 99)
-            axs[row, col].imshow(cube[i], origin='lower', cmap=suvi_color_table(wavelength), vmin=low, vmax=high)
+            axs[row, col].imshow(cube[i], origin='lower', 
+                                 cmap=suvi_color_table(wavelength))
             axs[row, col].set_title(key)
             axs[row, col].set_axis_off()
 
         axs[-1, -1].imshow(label, origin='lower',
-                           cmap=cmap,
-                           vmin=-1,
-                           vmax=len(THEMATIC_MAP_COLORS),
-                           interpolation='none')
+                        cmap=cmap,
+                        vmin=-1,
+                        vmax=len(THEMATIC_MAP_COLORS),
+                        interpolation='none')
         axs[-1, -1].set_axis_off()
         axs[-1, -1].set_title("Thematic map")
 
@@ -178,8 +119,96 @@ class SUVIImageDataset(Dataset):
         fig.tight_layout()
         return fig, axs
 
+def create_mask(radius, image_size):
+    # Define image center
+    center_x = (image_size[0] / 2) - 0.5
+    center_y = (image_size[1] / 2) - 0.5
 
-if __name__ == "__main__":
-    d = SUVIImageDataset("../data/index.csv", "../data")
-    fig, axs = d.visualize(9)
-    fig.show()
+    # Create mesh grid of image coordinates
+    xm, ym = np.meshgrid(np.arange(image_size[0]), np.arange(image_size[1]))
+    #np.linspace(0, image_size[0] - 1, num=image_size[0]), np.linspace(0, image_size[1] - 1, num=image_size[1]))
+
+    # Center each mesh grid (zero at the center)
+    xm_c = xm - center_x
+    ym_c = ym - center_y
+
+    # Create array of radii
+    rad = np.sqrt(xm_c ** 2 + ym_c ** 2)
+
+    # Create empty mask of same size as the image
+    mask = np.zeros((image_size[0], image_size[1]))
+
+    # Apply the mask as true for anything within a radius
+    mask[(rad < radius)] = 1
+
+    # Return the mask
+    return mask.astype('bool')
+
+
+def create_thmap_template(limb_thickness=6):
+    # Get the solar radius with class function
+    solar_radius = DIAM_SUN_ESTIMATE / 2 # get_solar_radius(image_set)
+
+    # Define end of disk and end of limb radii
+    disk_radius = solar_radius - (limb_thickness / 2)
+    limb_radius = solar_radius + (limb_thickness / 2)
+
+    # Create concentric layers for disk, limb, and outer space
+    # First template layer, outer space (value 1) with same size as composites
+    imagesize = (THMAP_SIZE, THMAP_SIZE) 
+    thmap_data = np.ones(imagesize)
+    
+    # Mask out the limb (value 8)
+    limb_mask = create_mask(limb_radius, imagesize)
+    thmap_data[limb_mask] = 8
+    
+    # Mask out the disk with quiet sun (value 7)
+    qs_mask = create_mask(disk_radius, imagesize)
+    thmap_data[qs_mask] = 7
+    
+    return thmap_data
+
+DIAM_SUN_ESTIMATE = 760 * 256/1280   # in an output cordmap of (256, 256) shape
+
+# def get_solar_radius(image_set, channel=2, refine=False):
+#         """
+#         Gets the solar radius from the header of the specified channel
+#         :param channel: channel to get radius from
+#         :param refine: whether to refine the metadata radius to better approximate the edge
+#         :return: solar radius specified in the header
+#         """
+
+#         try:
+#             solar_radius = DIAM_SUN_ESTIMATE / 2
+#             if refine:
+#                 composite_img = image_set[channel]#self.images[channel].data
+#                 # Determine image size
+#                 image_size = np.shape(composite_img)[0]
+#                 # Find center and radial mesh grid
+#                 center = (image_size / 2) - 0.5
+#                 xm, ym = np.meshgrid(np.linspace(0, image_size - 1, num=image_size),
+#                                      np.linspace(0, image_size - 1, num=image_size))
+#                 xm_c = xm - center
+#                 ym_c = ym - center
+#                 rads = np.sqrt(xm_c ** 2 + ym_c ** 2)
+#                 # Iterate through radii within a range past the solar radius
+#                 accuracy = 15
+#                 rad_iterate = np.linspace(solar_radius, solar_radius + 50, num=accuracy)
+#                 img_avgs = []
+#                 for rad in rad_iterate:
+#                     # Create a temporary solar image corresponding to the layer
+#                     solar_layer = np.zeros((image_size, image_size))
+#                     # Find indices in mask of the layer
+#                     indx_layer = np.where(rad >= rads)
+#                     # Set temporary image corresponding to indices to solar image values
+#                     solar_layer[indx_layer] = composite_img[indx_layer]
+#                     # Appends average to image averages
+#                     img_avgs.append(np.mean(solar_layer))
+#                 # Find "drop off" where mask causes average image brightness to drop
+#                 diff_avgs = np.asarray(img_avgs[0:accuracy - 1]) - np.asarray(img_avgs[1:accuracy])
+#                 # Return the radius that best represents the edge of the sun
+#                 solar_radius = rad_iterate[np.where(np.amax(diff_avgs))[0] + 1]
+#         except KeyError:
+#             raise RuntimeError("Header does not include the solar diameter or radius")
+#         else:
+#             return solar_radius
