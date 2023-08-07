@@ -3,6 +3,11 @@
 
 Tools for **CO**mprehensive **R**apid **D**igest maps for space weather.
 
+![example image](example.png)
+
+Above is an example input and output from the fine-tuned Segment Anything Model. 
+This is a preliminary result which will be improved. 
+
 ## 1. Preparing data
 
 1. Run `bin/download_data.py` to download the data. 
