@@ -1,3 +1,4 @@
+from __future__ import annotations
 import os
 from tqdm import tqdm
 from statistics import mean
@@ -7,13 +8,11 @@ import monai
 from transformers import SamModel
 from torch.utils.data import DataLoader
 from transformers import SamProcessor
-import argparse
 import numpy as np
-import zarr
 from glob import glob 
-from cordmap.data import SUVIDataset, THMEMATIC_MAP_THEMES, create_thmap_template
-from cordmap.prompt import get_suvi_prompt_box
+from cordmap.data import SUVIDataset, create_thmap_template
 
+# Theme names and their corresponding index in the the thematic map (according to NOAA)
 THEMES_TO_TRAIN = {"filament": 4,
                    "prominence": 5,
                    "coronal_hole": 6,
@@ -21,21 +20,40 @@ THEMES_TO_TRAIN = {"filament": 4,
                    "flare": 9}
 
 class CORDNN:
-    def __init__(self, themes_to_train=THEMES_TO_TRAIN):
-        self.is_trained = False
-        self.themes_to_train = themes_to_train
+    """Neural network for creating CORD maps"""
+    def __init__(self):
+        """Creates a CORDNN object, defaults to untrained with no models"""
+        self._is_trained = False
         self._models = dict()
     
-    def train(self, images, masks, num_epochs=3, model_name="facebook/sam-vit-base"):
-        for theme, theme_index in self.themes_to_train.items():
+    def train(self, images: np.ndarray, masks: np.ndarray, 
+              num_epochs: int = 3, model_name: str = "facebook/sam-vit-base"):
+        """Trains a set of neural networks, one for each theme. 
+
+        Args:
+            images (np.ndarray): input 3 color images to train. shape=(N, 3, 1024, 1024)
+            masks (np.ndarray): output masks to predict, shape=(N, 256, 256)
+            num_epochs (int, optional): number of epochs to train for. Defaults to 3.
+            model_name (str, optional): which SAM model to use as the base. 
+                Defaults to "facebook/sam-vit-base".
+        """
+        for theme, theme_index in THEMES_TO_TRAIN.items():
             self._models[theme] = CORDNN._train_single_theme(images, 
                                                              masks==theme_index, 
                                                              num_epochs=num_epochs,
                                                              model_name=model_name)
-        self.is_trained = True
+        self._is_trained = True
     
-    def predict(self, image):
-        predictions = {theme: self._predict_single_theme(image, theme) 
+    def predict(self, inputs) -> np.ndarray:
+        """Predict a CORD map from a given input image 
+
+        Args:
+            inputs: a batch of one input, from a pytorch dataloader
+
+        Returns:
+            np.ndarray: CORD map! 
+        """
+        predictions = {theme: self._predict_single_theme(inputs, theme) 
                        for theme in self._models}
         out = create_thmap_template()
         
@@ -45,26 +63,46 @@ class CORDNN:
         return out
         
     def save(self, directory: str):
-        if not self.is_trained:
+        """Saves a CORDNN to a directory
+
+        Args:
+            directory (str): where to save the result
+
+        Raises:
+            RuntimeError: if the model is not trained, it cannot save
+        """
+        if not self._is_trained:
             raise RuntimeError("Cannot save an untrained model")
         for theme, model in self._models.items():
             model.save_pretrained(os.path.join(directory, theme))
             
     @classmethod
-    def load(cls, path):
+    def load(cls, path: str) -> CORDNN:
+        """Loads a CORDNN from file
+
+        Args:
+            path (str): the directory containing the model
+
+        Returns:
+            CORDNN: a trained model
+        """
         theme_paths = glob(os.path.join(path, "*"))
-        submodels = {os.path.basename(theme_path): SamModel.from_pretrained(theme_path) for theme_path in theme_paths}
-        out = cls()  # TODO: handle when you don't train all the themes
+        submodels = {os.path.basename(theme_path): SamModel.from_pretrained(theme_path) 
+                     for theme_path in theme_paths}
+        out = cls() 
         out._models = submodels
         return out
         
-    def _predict_single_theme(self, inputs, theme): # image, theme):
-        prompt = get_suvi_prompt_box()
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+    def _predict_single_theme(self, inputs, theme: str) -> np.ndarray:
+        """Predicts a binary mask for a given theme
 
-        # prepare image + box prompt for the model
-        #processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
-        #inputs = processor(image, input_boxes=[[prompt]], return_tensors="pt").to(device)
+        Args:
+            inputs: a batch of one input, from a pytorch dataloader
+            theme (str): which theme to predict
+
+        Returns:
+            np.ndarray: a binary mask where 1 is a True and 0 is a False
+        """
         self._models[theme].eval()
 
         # forward pass
@@ -82,8 +120,20 @@ class CORDNN:
     
     @staticmethod
     def _train_single_theme(images, masks, num_epochs=3, 
-                            model_name="facebook/sam-vit-base"):
-        processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
+                            model_name="facebook/sam-vit-base") -> SamModel:
+        """Trains a model for a given theme
+
+        Args:
+            images (np.ndarray): input 3 color images to train. shape=(N, 3, 1024, 1024)
+            masks (np.ndarray): output masks to predict, shape=(N, 256, 256)
+            num_epochs (int, optional): number of epochs to train for. Defaults to 3.
+            model_name (str, optional): which SAM base to use. 
+                Defaults to "facebook/sam-vit-base".
+
+        Returns:
+            SamModel: PyTorch HuggingFace trained SAM model
+        """
+        processor = SamProcessor.from_pretrained(model_name)
 
         train_dataset = SUVIDataset(images, masks, processor=processor)
 
@@ -102,7 +152,9 @@ class CORDNN:
         # Note: Hyperparameter tuning could improve performance here
         optimizer = Adam(model.mask_decoder.parameters(), lr=1e-5, weight_decay=0)
 
-        seg_loss = monai.losses.DiceCELoss(sigmoid=True, squared_pred=True, reduction='mean')
+        seg_loss = monai.losses.DiceCELoss(sigmoid=True, 
+                                           squared_pred=True, 
+                                           reduction='mean')
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         model.to(device)
