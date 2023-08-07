@@ -4,7 +4,8 @@ from skimage.draw import disk
 import matplotlib.pyplot as plt
 
 
-def align_images(img_test, img_ref, show_plots=False, use_mask=False, num_orb_points=10_000):
+def align_images(img_test, img_ref, show_plots=False, use_mask=False, 
+                 num_orb_points=10_000):
     # based on https://thinkinfi.com/image-alignment-and-registration-with-opencv/
     # TODO: remove hard coded numbers
     img_ref_grey = cv2.cvtColor(img_ref, cv2.COLOR_BGR2GRAY)

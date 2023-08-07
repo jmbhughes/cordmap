@@ -6,22 +6,36 @@ import pandas as pd
 from goessolarretriever import Retriever, Satellite, Product
 from dateutil.parser import parse as parse_str_to_datetime
 
+from cordmap.util import generate_spaced_times
 
-def generate_spaced_times(start: datetime, end: datetime, count: int) -> List[datetime]:
-    step = (end - start) / count
-    return [start + i * step for i in range(count)]
+ALL_SUVI_PRODUCTS = (Product.suvi_l2_ci094,
+                     Product.suvi_l2_ci131,
+                     Product.suvi_l2_ci171,
+                     Product.suvi_l2_ci195,
+                     Product.suvi_l2_ci284,
+                     Product.suvi_l2_ci304,
+                     Product.suvi_l2_thmap)
+
 
 
 def download_single_date(dt: datetime,
                          destination: str,
                          satellite: Satellite = Satellite.GOES16,
-                         products: Tuple[Product] = (Product.suvi_l2_ci094,
-                                                     Product.suvi_l2_ci131,
-                                                     Product.suvi_l2_ci171,
-                                                     Product.suvi_l2_ci195,
-                                                     Product.suvi_l2_ci284,
-                                                     Product.suvi_l2_ci304,
-                                                     Product.suvi_l2_thmap)) -> Dict[Product, str]:
+                         products: Tuple[Product] = ALL_SUVI_PRODUCTS) -> Dict[Product, str]:
+    """Downloads specified `products` from `satellite` 
+        at given datetime `dt` to the `destination`
+
+    Args:
+        dt (`datetime`): observation time
+        destination (str): where images will be saved
+        satellite (Satellite, optional): which satellite to download. 
+            Defaults to Satellite.GOES16.
+        products (Tuple[Product], optional): which products to download.
+            Defaults to ALL_SUVI_PRODUCTS.
+
+    Returns:
+        Dict[Product, str]: mapping of product to the string where it was saved
+    """
     r = Retriever()
     filenames = {}
     for product in products:
@@ -33,9 +47,25 @@ def download_single_date(dt: datetime,
     return filenames
 
 
-def download_many_dates(start: datetime, end: datetime, count: int, destination: str) -> None:
+def download_many_dates(start: datetime, 
+                        end: datetime, 
+                        n: int, 
+                        destination: str) -> None:
+    """Downloads `n` SUVI observations between `start` and `end` 
+        to `destination` with an index.csv to pair them up
+
+    Args:
+        start (datetime): first observation time requested
+        end (datetime): last observation time requested
+        n (int): how many observations to download
+        destination (str): where to save the images
+        
+    Notes:
+        If a date cannot be downloaded, the function proceeds. 
+        May return fewer than `n` observations in this case
+    """
     # Compute the dates to download
-    dates = generate_spaced_times(start, end, count)
+    dates = generate_spaced_times(start, end, n)
 
     # make the destination directory if it doesn't exist
     os.makedirs(destination, exist_ok=True)
@@ -65,6 +95,7 @@ def download_many_dates(start: datetime, end: datetime, count: int, destination:
     for col in df.columns:
         df[col] = df[col].map(lambda e: os.path.basename(e))
 
+    # save the index
     df.to_csv(os.path.join(destination, "index.csv"))
 
 
@@ -72,7 +103,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("start", help="first date to retrieve data from")
     parser.add_argument("end", help="last date to retrieve data from")
-    parser.add_argument("count", help="number of image sets to retrieve between start and end, uniformly spaced",
+    parser.add_argument("count", 
+                        help="number of image sets to retrieve"
+                        " uniformly between start and end",
                         type=int)
     parser.add_argument("destination", help="where to store the images")
     args = parser.parse_args()

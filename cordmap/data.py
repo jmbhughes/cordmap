@@ -35,6 +35,8 @@ THEMATIC_MAP_COLORS = ["white",
                        "#56B4E9",
                        "#CC79A7"]
 
+THEMATIC_MAP_CMAP = matplotlib.colors.ListedColormap(THEMATIC_MAP_COLORS)
+
 THMEMATIC_MAP_THEMES = {'unlabeled': 0,
                         'empty_outer_space': 1,
                         'bright_region': 3,
