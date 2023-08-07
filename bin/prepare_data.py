@@ -9,6 +9,8 @@ import cv2
 from tqdm import tqdm
 import zarr
 
+from cordmap.data import THMAP_SIZE
+
 TRAIN_PCT = 0.6
 VALID_PCT = 0.2
 TEST_PCT = 0.2
@@ -17,11 +19,9 @@ SCALE_POWER = 0.25
 LOW_PCT = 25
 HIGH_PCT = 99.99
 
-THMAP_SIZE = 256
-
 EUV_CHANNEL_ORDER = [94, 131, 171, 195, 284, 304]
 
-def load_single_set(paths: List[str], directory: str) -> (np.ndarray, np.ndarray):
+def load_single_set(paths: List[str], directory: str) -> Tuple[np.ndarray, np.ndarray]:
     """Loads all channels and thematic for a single time
 
     Args:
@@ -152,6 +152,8 @@ def scale_data(cube: np.ndarray, lows: [float], highs: [float]) -> np.ndarray:
     return cube.astype(np.uint8)
 
 if __name__ == "__main__":
+    """Prepares data by removing bad images and scaling. Saves as a Zarr."""
+   
     # parse inputs
     parser = argparse.ArgumentParser()
     parser.add_argument("index_path", help="path to the file index")
