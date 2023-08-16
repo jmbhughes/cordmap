@@ -1,6 +1,6 @@
 from typing import List
 
-def get_suvi_prompt_box() -> List[int, int, int, int]:
+def get_suvi_prompt_box() -> List[int]:
     """Retrieve the SUVI prompt box
 
     Returns:
