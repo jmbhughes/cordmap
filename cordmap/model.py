@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Dict
 import os
 from tqdm import tqdm
 from statistics import mean
@@ -103,6 +104,21 @@ class CORDNN:
         Returns:
             np.ndarray: a binary mask where 1 is a True and 0 is a False
         """
+        medsam_seg_prob = self._predict_single_theme_probabilities(inputs, theme)
+        medsam_seg = (medsam_seg_prob > 0.5).astype(np.uint8)
+
+        return medsam_seg
+    
+    def _predict_single_theme_probabilities(self, inputs, theme: str) -> np.ndarray:
+        """Predicts a binary mask for a given theme
+
+        Args:
+            inputs: a batch of one input, from a pytorch dataloader
+            theme (str): which theme to predict
+
+        Returns:
+            np.ndarray: a binary mask where 1 is a True and 0 is a False
+        """
         self._models[theme].eval()
 
         # forward pass
@@ -114,10 +130,14 @@ class CORDNN:
         
         # convert soft mask to hard mask
         medsam_seg_prob = medsam_seg_prob.cpu().numpy().squeeze()
-        medsam_seg = (medsam_seg_prob > 0.5).astype(np.uint8)
-
-        return medsam_seg
+        
+        return medsam_seg_prob
     
+    def predict_probabilities(self, inputs) -> Dict[str, np.ndarray]: 
+        predictions = {theme: self._predict_single_theme_probabilities(inputs, theme) 
+                        for theme in self._models}
+        return predictions
+        
     @staticmethod
     def _train_single_theme(images, masks, num_epochs=3, 
                             model_name="facebook/sam-vit-base") -> SamModel:
