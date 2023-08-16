@@ -13,6 +13,7 @@ import cv2
 from cordmap.prompt import get_suvi_prompt_box
 
 THMAP_SIZE = 256
+DIAM_SUN_ESTIMATE = 760 * 256/1280   # in an output cordmap of (256, 256) shape
 
 
 SUVI_CHANNEL_KEYS = ("Product.suvi_l2_ci094",
@@ -169,48 +170,3 @@ def create_thmap_template(limb_thickness=6):
     thmap_data[qs_mask] = 7
     
     return thmap_data
-
-DIAM_SUN_ESTIMATE = 760 * 256/1280   # in an output cordmap of (256, 256) shape
-
-# def get_solar_radius(image_set, channel=2, refine=False):
-#         """
-#         Gets the solar radius from the header of the specified channel
-#         :param channel: channel to get radius from
-#         :param refine: whether to refine the metadata radius to better approximate the edge
-#         :return: solar radius specified in the header
-#         """
-
-#         try:
-#             solar_radius = DIAM_SUN_ESTIMATE / 2
-#             if refine:
-#                 composite_img = image_set[channel]#self.images[channel].data
-#                 # Determine image size
-#                 image_size = np.shape(composite_img)[0]
-#                 # Find center and radial mesh grid
-#                 center = (image_size / 2) - 0.5
-#                 xm, ym = np.meshgrid(np.linspace(0, image_size - 1, num=image_size),
-#                                      np.linspace(0, image_size - 1, num=image_size))
-#                 xm_c = xm - center
-#                 ym_c = ym - center
-#                 rads = np.sqrt(xm_c ** 2 + ym_c ** 2)
-#                 # Iterate through radii within a range past the solar radius
-#                 accuracy = 15
-#                 rad_iterate = np.linspace(solar_radius, solar_radius + 50, num=accuracy)
-#                 img_avgs = []
-#                 for rad in rad_iterate:
-#                     # Create a temporary solar image corresponding to the layer
-#                     solar_layer = np.zeros((image_size, image_size))
-#                     # Find indices in mask of the layer
-#                     indx_layer = np.where(rad >= rads)
-#                     # Set temporary image corresponding to indices to solar image values
-#                     solar_layer[indx_layer] = composite_img[indx_layer]
-#                     # Appends average to image averages
-#                     img_avgs.append(np.mean(solar_layer))
-#                 # Find "drop off" where mask causes average image brightness to drop
-#                 diff_avgs = np.asarray(img_avgs[0:accuracy - 1]) - np.asarray(img_avgs[1:accuracy])
-#                 # Return the radius that best represents the edge of the sun
-#                 solar_radius = rad_iterate[np.where(np.amax(diff_avgs))[0] + 1]
-#         except KeyError:
-#             raise RuntimeError("Header does not include the solar diameter or radius")
-#         else:
-#             return solar_radius
