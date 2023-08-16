@@ -71,7 +71,7 @@ class SUVIDataset(Dataset):
 
         # add ground truth segmentation
         inputs["ground_truth_mask"] = ground_truth_mask
-
+        inputs['image'] = image
         return inputs
 
     def visualize(self, idx: int) -> Tuple[plt.Figure, plt.Axes]:
