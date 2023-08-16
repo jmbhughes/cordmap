@@ -23,13 +23,13 @@ if __name__ == "__main__":
   
   # prepare dataset
   processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
-  train_dataset = SUVIDataset(images, masks, processor=processor)
-  train_dataloader = DataLoader(train_dataset, 
+  valid_dataset = SUVIDataset(images, masks, processor=processor)
+  valid_dataloader = DataLoader(valid_dataset, 
                               batch_size=1, 
                               shuffle=False)
   
   i = 0
-  for batch in tqdm(train_dataloader):
+  for batch in tqdm(valid_dataloader):
     cm = model.predict(batch)
       
     # Make a figure for each image in the validation set!
