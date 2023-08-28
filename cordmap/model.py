@@ -12,6 +12,7 @@ from transformers import SamProcessor
 import numpy as np
 from glob import glob 
 from cordmap.data import SUVIDataset, create_thmap_template
+import wandb
 
 # Theme names and their corresponding index in the the thematic map (according to NOAA)
 THEMES_TO_TRAIN = {"filament": 4,
@@ -42,7 +43,8 @@ class CORDNN:
             self._models[theme] = CORDNN._train_single_theme(images, 
                                                              masks==theme_index, 
                                                              num_epochs=num_epochs,
-                                                             model_name=model_name)
+                                                             model_name=model_name,
+                                                             theme_label=theme)
         self._is_trained = True
     
     def predict(self, inputs) -> np.ndarray:
@@ -140,7 +142,7 @@ class CORDNN:
         
     @staticmethod
     def _train_single_theme(images, masks, num_epochs=3, 
-                            model_name="facebook/sam-vit-base") -> SamModel:
+                            model_name="facebook/sam-vit-base", theme_label="") -> SamModel:
         """Trains a model for a given theme
 
         Args:
@@ -201,7 +203,6 @@ class CORDNN:
                 optimizer.step()
                 epoch_losses.append(loss.item())
 
-            print(f'EPOCH: {epoch}')
-            print(f'Mean loss: {mean(epoch_losses)}')
+            wandb.log({f"{theme_label} loss": mean(epoch_losses)})
         
         return model

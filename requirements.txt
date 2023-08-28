@@ -14,3 +14,4 @@ datasets
 monai
 transformers
 zarr
+wandb

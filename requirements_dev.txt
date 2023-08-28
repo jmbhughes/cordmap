@@ -14,5 +14,6 @@ datasets
 monai
 git+https://github.com/huggingface/transformers.git
 zarr
+wandb
 
 pytest
