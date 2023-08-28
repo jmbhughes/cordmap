@@ -167,3 +167,4 @@ cython_debug/
 # experiment things
 results/
 scratch.ipynb
+wandb/
