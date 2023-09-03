@@ -64,7 +64,8 @@ class SUVIDataset(Dataset):
         ground_truth_mask = np.array(item["label"])
         
         # apply any specified augmentations
-        image, ground_truth_mask = self.augmentations(image, ground_truth_mask)
+        if self.augmentations is not None:
+            image, ground_truth_mask = self.augmentations(image, ground_truth_mask)
 
         # get bounding box prompt
         prompt = get_suvi_prompt_box()
