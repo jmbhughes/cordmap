@@ -33,7 +33,9 @@ class CORDNN:
     
     def train(self, images: np.ndarray, masks: np.ndarray, 
               valid_images, valid_masks, 
-              num_epochs: int = 3, model_name: str = "facebook/sam-vit-base"):
+              num_epochs: int = 3, 
+              augmentations = None,
+              model_name: str = "facebook/sam-vit-base"):
         """Trains a set of neural networks, one for each theme. 
 
         Args:
@@ -148,7 +150,8 @@ class CORDNN:
         
     @staticmethod
     def _train_single_theme(images, masks, valid_images, valid_masks, num_epochs=3, 
-                            model_name="facebook/sam-vit-base", theme_label="") -> SamModel:
+                            model_name="facebook/sam-vit-base", theme_label="",
+                            augmentations=None) -> SamModel:
         """Trains a model for a given theme
 
         Args:
@@ -163,7 +166,8 @@ class CORDNN:
         """
         processor = SamProcessor.from_pretrained(model_name)
 
-        train_dataset = SUVIDataset(images, masks, processor=processor)
+        train_dataset = SUVIDataset(images, masks, processor=processor, 
+                                    augmentations=augmentations)
 
         train_dataloader = DataLoader(train_dataset, 
                                     batch_size=5, 

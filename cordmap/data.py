@@ -48,10 +48,12 @@ THMEMATIC_MAP_THEMES = {'unlabeled': 0,
                         'limb': 8,
                         'flare': 9}
 
+
 class SUVIDataset(Dataset):
-    def __init__(self, images, masks, processor):
+    def __init__(self, images, masks, processor, augmentations=None):
         self.dataset = [{"image": img, "label": m} for img, m in zip(images, masks)]
         self.processor = processor
+        self.augmentations = augmentations
 
     def __len__(self):
         return len(self.dataset)
@@ -60,6 +62,9 @@ class SUVIDataset(Dataset):
         item = self.dataset[idx]
         image = item["image"]
         ground_truth_mask = np.array(item["label"])
+        
+        # apply any specified augmentations
+        image, ground_truth_mask = self.augmentations(image, ground_truth_mask)
 
         # get bounding box prompt
         prompt = get_suvi_prompt_box()

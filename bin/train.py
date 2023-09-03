@@ -1,6 +1,8 @@
 import numpy as np
 import zarr
 import wandb
+import torchvision.transforms.v2 as transforms
+
 from cordmap.model import CORDNN
 
 
@@ -10,8 +12,8 @@ if __name__ == "__main__":
                'training_zarr_y_path': "/d0/mhughes/thmap_suvi_train_y.zarr",
                'validation_zarr_x_path': "/d0/mhughes/thmap_suvi_valid_x.zarr",
                'validation_zarr_y_path': "/d0/mhughes/thmap_suvi_valid_y.zarr", 
-               'save_path': "/home/mhughes/full_model_50/",
-               'num_epochs': 50,
+               'save_path': "/d0/mhughes/thmap_suvi_models/augmentation_run/",
+               'num_epochs': 10,
                'model': 'CORDNN-one SAM per theme'
               }
     
@@ -30,8 +32,19 @@ if __name__ == "__main__":
     valid_images = np.array(valid_images)[:, config['chosen_channels'], :, :]
     valid_masks = np.array(valid_masks)
     
+    augmentations = transforms.Compose(
+        [
+        transforms.ColorJitter(contrast=0.1, saturation=0.1, brightness=0.1),
+        transforms.RandomRotation(180),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomVerticalFlip()
+        ]
+    )
+    
     model = CORDNN()
-    model.train(images, masks, valid_images, valid_masks, num_epochs=config['num_epochs'])
+    model.train(images, masks, valid_images, valid_masks, 
+                num_epochs=config['num_epochs'],
+                augmentations=augmentations)
     model.save(config['save_path'])
     
     wandb.finish()
