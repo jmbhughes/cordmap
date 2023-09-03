@@ -11,8 +11,11 @@ from torch.utils.data import DataLoader
 from transformers import SamProcessor
 import numpy as np
 from glob import glob 
-from cordmap.data import SUVIDataset, create_thmap_template
+import matplotlib.pyplot as plt
 import wandb
+from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
+
+from cordmap.data import SUVIDataset, create_thmap_template, THEMATIC_MAP_COLORS, THEMATIC_MAP_CMAP
 
 # Theme names and their corresponding index in the the thematic map (according to NOAA)
 THEMES_TO_TRAIN = {"filament": 4,
@@ -29,6 +32,7 @@ class CORDNN:
         self._models = dict()
     
     def train(self, images: np.ndarray, masks: np.ndarray, 
+              valid_images, valid_masks, 
               num_epochs: int = 3, model_name: str = "facebook/sam-vit-base"):
         """Trains a set of neural networks, one for each theme. 
 
@@ -42,6 +46,8 @@ class CORDNN:
         for theme, theme_index in THEMES_TO_TRAIN.items():
             self._models[theme] = CORDNN._train_single_theme(images, 
                                                              masks==theme_index, 
+                                                             valid_images,
+                                                             valid_masks==theme_index,
                                                              num_epochs=num_epochs,
                                                              model_name=model_name,
                                                              theme_label=theme)
@@ -141,7 +147,7 @@ class CORDNN:
         return predictions
         
     @staticmethod
-    def _train_single_theme(images, masks, num_epochs=3, 
+    def _train_single_theme(images, masks, valid_images, valid_masks, num_epochs=3, 
                             model_name="facebook/sam-vit-base", theme_label="") -> SamModel:
         """Trains a model for a given theme
 
@@ -163,6 +169,12 @@ class CORDNN:
                                     batch_size=5, 
                                     num_workers=5, 
                                     shuffle=True)
+
+        valid_dataset = SUVIDataset(valid_images, valid_masks, processor=processor)
+
+        valid_dataloader = DataLoader(valid_dataset, 
+                                    batch_size=1, 
+                                    shuffle=False)
 
         model = SamModel.from_pretrained(model_name)
 
@@ -203,6 +215,29 @@ class CORDNN:
                 optimizer.step()
                 epoch_losses.append(loss.item())
 
-            wandb.log({f"{theme_label} loss": mean(epoch_losses)})
+            model.eval()
+            epoch_val_acc, epoch_val_precision, epoch_val_recall, epoch_val_f1 = [], [], [], []
+            for batch in tqdm(valid_dataloader):
+                with torch.no_grad():
+                    outputs = model(pixel_values=batch["pixel_values"].to(device),
+                            input_boxes=batch["input_boxes"].to(device),
+                            multimask_output=False)
+                medsam_seg_prob = torch.sigmoid(outputs.pred_masks.squeeze(1))
+                medsam_seg_prob = medsam_seg_prob.cpu().numpy().squeeze()
+                prediction = (medsam_seg_prob > 0.5).astype(np.uint8).astype(bool)
+                ground_truth = np.array(batch["ground_truth_mask"]).squeeze().astype(bool)
+                    
+                epoch_val_acc.append(accuracy_score(ground_truth.flatten(), prediction.flatten()))
+                epoch_val_precision.append(precision_score(ground_truth.flatten(), prediction.flatten()))
+                epoch_val_recall.append(recall_score(ground_truth.flatten(), prediction.flatten()))
+                epoch_val_f1.append(f1_score(ground_truth.flatten(), prediction.flatten()))
+            
+            wandb.log({f"{theme_label} loss": mean(epoch_losses), 
+                      f"val/mean {theme_label} accuracy": np.mean(epoch_val_acc),
+                      f"val/mean {theme_label} precision": np.mean(epoch_val_precision),
+                      f"val/mean {theme_label} recall": np.mean(epoch_val_recall),
+                      f"val/mean {theme_label} f1": np.mean(epoch_val_f1),
+                      'epoch': epoch
+                })        
         
         return model

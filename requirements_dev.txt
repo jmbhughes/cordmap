@@ -15,5 +15,6 @@ monai
 git+https://github.com/huggingface/transformers.git
 zarr
 wandb
+scikit-learn
 
 pytest
