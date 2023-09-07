@@ -31,8 +31,9 @@ class CORDNN:
         self._is_trained = False
         self._models = dict()
     
-    def train(self, images: np.ndarray, masks: np.ndarray, 
-              valid_images, valid_masks, 
+    def train(self, zarr_path,
+              train_months,
+              validation_months,
               num_epochs: int = 3, 
               augmentations = None,
               model_name: str = "facebook/sam-vit-base"):
@@ -46,12 +47,12 @@ class CORDNN:
                 Defaults to "facebook/sam-vit-base".
         """
         for theme, theme_index in THEMES_TO_TRAIN.items():
-            self._models[theme] = CORDNN._train_single_theme(images, 
-                                                             masks==theme_index, 
-                                                             valid_images,
-                                                             valid_masks==theme_index,
+            self._models[theme] = CORDNN._train_single_theme(zarr_path, train_months, 
+                                                             validation_months,
+                                                             theme_index=theme_index,
                                                              num_epochs=num_epochs,
                                                              model_name=model_name,
+                                                             augmentations=augmentations,
                                                              theme_label=theme)
         self._is_trained = True
     
@@ -129,11 +130,18 @@ class CORDNN:
         Returns:
             np.ndarray: a binary mask where 1 is a True and 0 is a False
         """
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        self._models[theme].to(device)
+
         self._models[theme].eval()
 
         # forward pass
         with torch.no_grad():
-            outputs = self._models[theme](**inputs, multimask_output=False)
+            outputs = self._models[theme](
+                            pixel_values=inputs["pixel_values"].to(device),
+                            input_boxes=inputs["input_boxes"].to(device),
+                            multimask_output=False)
 
         # apply sigmoid
         medsam_seg_prob = torch.sigmoid(outputs.pred_masks.squeeze(1))
@@ -149,8 +157,10 @@ class CORDNN:
         return predictions
         
     @staticmethod
-    def _train_single_theme(images, masks, valid_images, valid_masks, num_epochs=3, 
-                            model_name="facebook/sam-vit-base", theme_label="",
+    def _train_single_theme(zarr_path, train_months, validation_months, theme_index, 
+                            num_epochs=3, 
+                            model_name="facebook/sam-vit-base", 
+                            theme_label="",
                             augmentations=None) -> SamModel:
         """Trains a model for a given theme
 
@@ -166,7 +176,7 @@ class CORDNN:
         """
         processor = SamProcessor.from_pretrained(model_name)
 
-        train_dataset = SUVIDataset(images, masks, processor=processor, 
+        train_dataset = SUVIDataset(zarr_path, months=train_months, processor=processor, 
                                     augmentations=augmentations)
 
         train_dataloader = DataLoader(train_dataset, 
@@ -174,7 +184,7 @@ class CORDNN:
                                     num_workers=5, 
                                     shuffle=True)
 
-        valid_dataset = SUVIDataset(valid_images, valid_masks, processor=processor)
+        valid_dataset = SUVIDataset(zarr_path, months=validation_months, processor=processor)
 
         valid_dataloader = DataLoader(valid_dataset, 
                                     batch_size=1, 
@@ -208,7 +218,7 @@ class CORDNN:
 
                 # compute loss
                 predicted_masks = outputs.pred_masks.squeeze(1)
-                ground_truth_masks = batch["ground_truth_mask"].float().to(device)
+                ground_truth_masks = (batch["ground_truth_mask"] == theme_index).float().to(device)
                 loss = seg_loss(predicted_masks, ground_truth_masks.unsqueeze(1))
 
                 # backward pass (compute gradients of parameters w.r.t. loss)
@@ -229,7 +239,7 @@ class CORDNN:
                 medsam_seg_prob = torch.sigmoid(outputs.pred_masks.squeeze(1))
                 medsam_seg_prob = medsam_seg_prob.cpu().numpy().squeeze()
                 prediction = (medsam_seg_prob > 0.5).astype(np.uint8).astype(bool)
-                ground_truth = np.array(batch["ground_truth_mask"]).squeeze().astype(bool)
+                ground_truth = np.array(batch["ground_truth_mask"] == theme_index).squeeze().astype(bool)
                     
                 epoch_val_acc.append(accuracy_score(ground_truth.flatten(), prediction.flatten()))
                 epoch_val_precision.append(precision_score(ground_truth.flatten(), prediction.flatten()))

@@ -10,6 +10,8 @@ from matplotlib.patches import Patch
 from sunpy.visualization.colormaps.color_tables import suvi_color_table
 import astropy.units as u
 import cv2
+import zarr
+from datetime import timedelta
 from cordmap.prompt import get_suvi_prompt_box
 
 THMAP_SIZE = 256
@@ -48,20 +50,80 @@ THMEMATIC_MAP_THEMES = {'unlabeled': 0,
                         'limb': 8,
                         'flare': 9}
 
+SCALE_POWER = 0.25
+
+
+def scale_data(cube: np.ndarray, lows: [float], highs: [float]) -> np.ndarray:
+    """Scales data to the 0.25 power, linearizes between 0 and 255, and clips
+
+    Args:
+        cube (np.ndarray): cube of observations
+        lows (list[floats]): low percentile values for each channel
+        highs (list[floats]): high percentile values for each channel
+
+    Returns:
+        np.ndarray: 
+            scaled data cube
+    """    
+    cube = np.sign(cube) * np.power(np.abs(cube), SCALE_POWER)
+        
+    for i, (low, high) in enumerate(zip(lows, highs)):
+        cube[i, :, :] = np.clip((cube[i, :, :] - low) / (high - low) * 255, 0, 255)
+    return cube.astype(np.uint8)
+
 
 class SUVIDataset(Dataset):
-    def __init__(self, images, masks, processor, augmentations=None):
-        self.dataset = [{"image": img, "label": m} for img, m in zip(images, masks)]
+    def __init__(self, filename: str, 
+                 processor, 
+                 months: Optional[Tuple[int]] = None, 
+                 augmentations=None,
+                 x_channels=(2, 4, 5),  # channels = 171, 284, 304
+                 zarr_group='data',
+                 x_lower_scale=(0, 0.0, 0.26), 
+                 x_upper_scale=(1.28, 1.14, 1.82),
+                 y_dims=(256, 256),
+                 cadence: timedelta = timedelta(days=1), 
+                 cadence_epsilon: timedelta = timedelta(minutes=60)):
+        self.x_lower_scale = x_lower_scale
+        self.x_upper_scale = x_upper_scale
+        self.y_dims = y_dims
+        self.cadence_window = (cadence - cadence_epsilon, cadence + cadence_epsilon)
+        self.zarr_group = zarr_group
+        self.data = zarr.open(filename)
+        self.channels = np.array(x_channels)
         self.processor = processor
         self.augmentations = augmentations
 
+        # select only observations in the requested months
+        if months is None:
+            months = list(range(1, 13))
+        self.t_obs =  pd.to_datetime(self.data['t_obs'])
+        selected_times = np.array([(i, t) for i, t in 
+                                   enumerate(self.t_obs) if t.month in months])
+        
+        # filter to make sure that each x observation has a corresponding valid y
+        t_diff = np.median(np.diff(self.t_obs))
+        step = int(np.round(np.timedelta64(cadence)/t_diff))
+        self.x_index = [i for (i, t) in selected_times 
+         if i+step < len(self.t_obs) 
+            and (self.t_obs[i+step] - t) > self.cadence_window[0] 
+            and (self.t_obs[i+step] - t) < self.cadence_window[1]]
+
     def __len__(self):
-        return len(self.dataset)
+        return len(self.x_index)
 
     def __getitem__(self, idx):
-        item = self.dataset[idx]
-        image = item["image"]
-        ground_truth_mask = np.array(item["label"])
+        xi = self.x_index[idx]
+        image = self.data[self.zarr_group][xi][self.channels]
+        ground_truth_mask = self.data[self.zarr_group][xi][-1]
+        
+        # scale the image appropriately
+        image = scale_data(image, self.x_lower_scale, self.x_upper_scale)
+        
+        # make the ground truth the expected size
+        ground_truth_mask = cv2.resize(ground_truth_mask, 
+                                       dsize=self.y_dims, 
+                                       interpolation=cv2.INTER_NEAREST)
         
         # apply any specified augmentations
         if self.augmentations is not None:

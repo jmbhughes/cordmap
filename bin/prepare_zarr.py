@@ -29,9 +29,9 @@ KEYS_TO_KEEP = [
 ]
 
 if __name__ == "__main__":
-    filenames = sorted(glob("/d0/mhughes/thmap_suvi_daily/*.fits"))
-    cadence = timedelta(hours=24)
-    cadence_epsilon = timedelta(minutes=60)
+    filenames = sorted(glob("/d0/mhughes/thmap_suvi_hourly/*.fits"))
+    cadence = timedelta(hours=1)
+    cadence_epsilon = timedelta(minutes=5)
     cadence_window = (cadence - cadence_epsilon, cadence + cadence_epsilon)
 
     DATETIME_STR_FORMAT =  "s%Y%m%dT%H%M%SZ"
@@ -59,13 +59,12 @@ if __name__ == "__main__":
                 groups.append(group)
                 
     df = pd.DataFrame(groups)
-    df.to_csv("/d0/mhughes/thmap_suvi_daily.csv")
+    df.to_csv("/d0/mhughes/thmap_suvi_hourly.csv")
     
-    time_chunk_size = 1
+    time_chunk_size = 3
     channel_chunk_size = 7
 
-    synchronizer = zarr.ProcessSynchronizer('data/example.sync')
-    store = zarr.DirectoryStore("/d0/mhughes/thmap_suvi_daily.zarr")
+    store = zarr.DirectoryStore("/d0/mhughes/thmap_suvi_hourly.zarr")
     compressor = Blosc(cname='zstd', clevel=5, shuffle=Blosc.BITSHUFFLE)
     root = zarr.group(store=store, overwrite=True)
     data_group = root.create_dataset("data", 
@@ -101,11 +100,6 @@ if __name__ == "__main__":
             pass
         p.close()
         p.join()
-        
-    # temp = []
-    # for row in df.iterrows():
-    #     temp.append(load_stack(row))
-    # dask.compute(*temp)
         
     for key in KEYS_TO_KEEP:
         data_group.attrs[key] = saved_meta[key]

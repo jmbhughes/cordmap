@@ -1,0 +1,3 @@
+train_month_divisions: [[1], [2]]
+validation_month_divisions: [[2], [1]]
+random_seeds: [1, 2]
