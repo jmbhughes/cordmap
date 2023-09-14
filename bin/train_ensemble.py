@@ -61,7 +61,7 @@ if __name__ == "__main__":
         
     for i, valid_months in enumerate(config['validation_months_division']):
         for j, _ in enumerate(config['random_seeds']):
-            model_num = i*len(config['validation_months_division']) + j
+            model_num = i*len(config['random_seeds']) + j
             model = ensemble.models[model_num]
             processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
             valid_dataset = SUVIDataset(config['zarr_path'], 
